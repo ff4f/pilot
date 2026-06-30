@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large data artifacts (keep plots, ignore heavy JSON/JSONL)
+artifacts/*.json
+artifacts/*.jsonl
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
