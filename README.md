@@ -1,158 +1,119 @@
-# Mini-Pilot: Stability & Cost of Evaluation for LLM-based Coding Agents
+# Reliable, Low-Cost Evaluation of LLM Coding Agents — a pilot study
 
-**Goal:** empirically prove that **single-run LLM-judge is too noisy to detect ~2% quality differences**, and that **variance reduction (M-run averaging and/or structured output) fixes it** — the exact gap raised in the *HULA: Challenges and Future Directions* paper (MSR 2025).
+A small, reproducible pilot on how to evaluate LLM-based software-development agents **reliably and cheaply**. It reproduces, on fully open data, the evaluation-instability problem reported for an industrial human-in-the-loop coding agent (HULA, MSR 2025), and measures how well simple variance-reduction techniques fix it.
 
-This is a "proof of capability" for a Master by Research application to A/Prof Patanamon Thongtanunam. The target: reproducible, statistically rigorous, cheap, and completed in ~1 week.
-
----
-
-## ⚠️ Important clarification about HULA
-
-HULA is **not** publicly available (internal Atlassian → commercial product Rovo Dev). There is no code/weights to run.
-
-Design consequences:
-- This pilot **does not run or compare against HULA**.
-- The pilot demonstrates **the problem with the evaluation method**, which applies generally to LLM-judge-based evaluation of coding agents.
-- HULA's numbers (37.2% resolution on SWE-bench Verified, F1 0.67 vs unit tests, correlation 0.7 vs humans) are used as **motivation**, cited from their paper — not replicated.
-- The question "can it detect 2%?" is answered through **controlled construction on an open benchmark** (true gap is known from unit tests).
-
-This is actually an advantage: reproducible, self-contained, and directly answers their future work.
+Built as a proof of capability for a Master by Research application. The aim was something reproducible, statistically careful, and runnable on a laptop.
 
 ---
 
-## Claims to be proven (hypotheses)
+## Motivation
 
-1. **H1 (the problem):** the variance of LLM-judge scores across runs is large enough that a single-run LLM-judge **fails** to detect a true quality difference of 2% (low power).
-2. **H2 (remedy #1 — averaging):** averaging M runs reduces variance ≈ `σ²/M`, increasing power until 2% is detectable.
-3. **H3 (remedy #2 — structured output):** a judge with structured output + fault taxonomy (CodeJudge-style) has lower per-item variance than free-form, thus requiring smaller M for the same power.
-4. **H4 (validity):** the more stable judge configuration is also **more valid** (higher correlation & F1 against ground-truth unit tests).
+LLM-based coding agents are evaluated in two main ways: running generated code against unit tests (functional correctness), and using a separate LLM to score it (LLM-as-judge). Industrial experience with the HULA framework (Pasuksmit et al., 2025) reports that LLM-judge scoring **fluctuates from run to run**, which makes it hard to detect the small (1-2%) improvements that matter during iterative development, and calls for a more stable, lower-cost evaluation method. This pilot takes up that gap directly.
 
 ---
 
-## What you need (tech stack)
+## A note on HULA
 
-| Component | Choice | Notes |
+HULA is not public (internal to Atlassian, productised as the commercial Rovo Dev). This pilot **does not run or compare against HULA**. It reproduces the *evaluation-method* problem - which is general to LLM-judge evaluation of coding agents - on the open HumanEval+ benchmark, and uses HULA's reported numbers only as motivation. The "can it detect 2%?" question is answered by controlled measurement on open data, where ground-truth correctness is known from unit tests.
+
+---
+
+## Key results
+
+Measured on HumanEval+ (164 problems), with a local `qwen2.5-coder:7b` judge scoring each candidate 8 times in two styles. "MDD" is the **Minimum Detectable Difference**: the smallest difference in aggregate quality the judge can detect reliably (alpha = 0.05, power = 0.8, approximately 2.8 x aggregate standard error).
+
+| Judge runs averaged (m) | MDD, free-form | MDD, structured |
 |---|---|---|
-| Language | Python 3.9+ | |
-| Data + ground truth | **EvalPlus** (HumanEval+ / MBPP+) | `pip install evalplus`; strict unit tests included |
-| Test execution | EvalPlus (via Docker, safe) | automatic ground-truth pass/fail |
-| Solution generator | Any LLM (OpenAI-compatible) | generates correct & incorrect candidates |
-| Judge | Any LLM (OpenAI-compatible) | the one whose noise is being evaluated |
-| Analysis | numpy, scipy, matplotlib, pandas | statistics + plots |
+| 1 (single run) | 1.82% | 2.05% |
+| 4 | 0.91% | 0.97% |
+| 8 | 0.64% | 0.69% |
 
-**FREE / cheap LLM options (important for your budget):**
-- **Ollama (local, free)** — `qwen2.5-coder:7b` or `llama3.1:8b`. Base URL `http://localhost:11434/v1`. Run overnight, zero cost. **Primary recommendation for pilot.**
-- **Groq (free tier)** — fast, has a daily free quota.
-- **Google Gemini (free tier)** — OpenAI-compatible endpoint available.
-- **OpenRouter** — some `:free` models.
-- **DeepSeek** — very cheap if you want a stronger judge.
+- **A single judge run sits right at the ~2% threshold** - reproducing, independently and on open data, the instability HULA reports.
+- **Averaging works.** MDD falls from 1.82% (1 run) to 0.64% (8 runs), closely tracking the expected `1/sqrt(m)` relationship. A simple averaging step restores reliable detection of 2% improvements, at a predictable compute cost.
+- **Structured judging did not help.** Contrary to expectation, structured rubric-based judging (CodeJudge-style) did **not** reduce variance - it was marginally worse than free-form at every `m`.
+- **Stability is not validity.** The judge's scores correlated only weakly with ground-truth correctness (Spearman approximately 0.25). A stable measurement is not necessarily an accurate one - a distinction that motivates further work.
 
-> This pilot is about **variance**, not absolute judge quality. Even a mediocre judge is sufficient to demonstrate the phenomenon. So use a free one.
+The full chronological trail - including an initial experiment whose design was flawed, diagnosed, and corrected - is in [`LAB_NOTEBOOK_EN.md`](LAB_NOTEBOOK_EN.md).
 
 ---
 
-## Source material (how to get data)
+## Method (corrected design)
 
-EvalPlus provides problems + strict test suites. No need to create a manual dataset.
-
-```python
-from evalplus.data import get_human_eval_plus, get_mbpp_plus, write_jsonl
-data = get_human_eval_plus()      # 164 problems, or get_mbpp_plus() (378 problems)
-# data[task_id]["prompt"] contains the specification + function signature
-```
-
-Ground truth is obtained by running:
-```bash
-evalplus.evaluate --dataset humaneval --samples artifacts/samples.jsonl
-# produces artifacts/samples_eval_results.json with pass/fail status per candidate
-```
-
-(For a more "impressive" but heavier version: SWE-bench Lite via HuggingFace `princeton-nlp/SWE-bench_Lite` + its Docker harness. Keep as a stretch goal — start with EvalPlus first.)
+1. **Generate** candidate solutions with a generator LLM (a mix of correct and incorrect).
+2. **Ground truth**: establish pass/fail for each candidate with EvalPlus (strict HumanEval+ tests).
+3. **Judge**: score each candidate repeatedly with an LLM judge, in free-form and structured modes; store all raw scores.
+4. **Analyse**: measure the run-to-run stability of the *aggregate* score across independent runs, and express it as the Minimum Detectable Difference for each configuration. (An earlier design instead planted artificial gaps and ran a paired t-test across problems; this measured the wrong kind of variability and was replaced - see the lab notebook.)
 
 ---
 
-## Experiment design (upstream → downstream)
+## Repository
 
-### Step 0 — Setup
-`pip install -r requirements.txt`, set LLM env vars (see `pilot.py`), prepare Docker for EvalPlus.
-
-### Step 1 — Generate candidates
-For **N problems**, generate **k candidates** per problem from the generator LLM at temperature ~0.6. The goal is to get a **mix of correct & incorrect solutions** (that's what we need). Save to `samples.jsonl`.
-
-### Step 2 — Ground truth (true labels)
-Run EvalPlus → each candidate gets a **pass(1)/fail(0)** label from strict unit tests. This is the "truth" we use to measure the true gap.
-
-### Step 3 — Judge (the expensive step)
-For each candidate, run the LLM-judge **M times** in **2 modes**:
-- **free-form**: "rate 1–10 how likely this solution is correct".
-- **structured**: JSON output with dimension sub-scores + fault list (fixed taxonomy), then `final_score` (CodeJudge-style → constrains output → lower variance).
-
-Save **all raw scores** (for reproducibility). Results are cached to avoid repeating expensive calls.
-
-**Judge call budget** ≈ `N × k × M × 2`. Size it to fit:
-- Minimum viable: N=50, k=3, M=10 → 3,000 calls.
-- Standard: N=80, k=4, M=12 → 7,680 calls.
-- With local Ollama: free, just wait.
-
-### Step 4 — Analysis (3 experiments)
-
-**Experiment 1 — Noise characterization (H1, H3).**
-Per candidate, compute **SD of scores across M runs**. Report median SD, free-form vs structured. *Expected:* structured < free-form.
-
-**Experiment 2 — Power vs true gap (H1, H2, H3) — MAIN PLOT.**
-- Construct many **system pairs (A, B)** by selecting one candidate per problem for each; some pairs are deliberately made with B worse on a random fraction of problems → produces a range of gaps.
-- For each pair, measure the **true gap** g = pass-rate(A) − pass-rate(B) from ground truth.
-- For each judge configuration {single-run, M-avg} × {free-form, structured}: take judge scores per problem for the selected candidates, run a **paired t-test** across problems. "Detected" = p < 0.05 **and** correct direction.
-- Aggregate: **detection rate (power)** as a function of g. *Read at g ≈ 0.02.*
-- *Expected:* single-run free-form ≈ powerless at 2%; M-avg structured ≈ has power. **This is the core evidence.**
-
-**Experiment 3 — Validity (H4).**
-Correlate average judge score per candidate with ground truth (Spearman + point-biserial), and compute **F1** from ("judge says good" ≥ threshold) vs (passes test). Per mode and M. *Expected:* M-avg structured has the highest correlation & F1 (echoing HULA numbers: corr 0.7 / F1 0.67).
+| File | Purpose |
+|---|---|
+| `pilot.py` | generate candidates, run the LLM judge (and a legacy analysis) |
+| `merge_results.py` | parse EvalPlus output into `pool.json` |
+| `analyze_mdd.py` | the MDD analysis - produces the main result |
+| `prompts.py` | free-form and structured judge prompts |
+| `LAB_NOTEBOOK_EN.md` | full chronological research log (incl. the null first attempt) |
+| `artifacts/` | raw judge scores (`pool.json`), EvalPlus results, plots |
+| `requirements.txt` | dependencies |
 
 ---
 
-## Deliverables
+## How to run
 
-1. **1-page summary** (PDF/Markdown): claims, methods, 3 findings, and "implication: to detect 1–2% improvements in agents like HULA, evaluation requires [X] runs or structured output".
-2. **3 plots**: (a) per-item SD distribution, (b) power vs true gap, (c) correlation/F1 table.
-3. **Clean repo**: code + config + raw scores + seed → anyone can reproduce.
-4. (Optional) **Notebook** that reproduces all plots.
+Stack: Python 3.9+, Ollama (free local LLMs), EvalPlus + Docker, SciPy. The pilot is about variance, not absolute judge quality, so a free local model is sufficient.
 
----
-
-## Why this sets you apart
-
-- 99% of applicants write "I'm interested in your research". You come with **an experiment that reproduces their gap + measures the solution**, with proper statistics (CI, t-test, power).
-- This speaks **Pick's language** (empirical, replication-driven) and leverages **your strengths** (engineering, evaluation harnesses).
-- Self-contained & reproducible → credible, not empty claims.
-- Directly maps to future work she wrote herself → you "come to help with her research", not bringing your own topic.
-
----
-
-## Threats to validity (mention this in the summary — makes you look mature)
-
-- Single judge & limited dataset (HumanEval+/MBPP+ = short functions, not repos) → not a universal claim; this is a **pilot**, indicating direction.
-- True gap from strict EvalPlus unit tests, not from human judgment → valid trade-off for scale.
-- i.i.d. assumption across runs for variance reduction = simplification; in the report, supplement with bootstrap CI if needed.
-- Results depend on judge model; report model & seed, and note that the phenomenon (not the exact numbers) is what generalizes.
-
----
-
-## How to run (brief)
-
+**Setup**
 ```bash
 pip install -r requirements.txt
-export LLM_BASE_URL="http://localhost:11434/v1"   # example: local Ollama
+pip install datasets
+export LLM_BASE_URL="http://localhost:11434/v1"   # local Ollama
 export LLM_API_KEY="ollama"
 export GEN_MODEL="qwen2.5-coder:7b"
 export JUDGE_MODEL="qwen2.5-coder:7b"
-
-python pilot.py generate   --dataset humaneval --n 50 --k 3 --gen-temp 0.6
-python pilot.py groundtruth --dataset humaneval
-python pilot.py judge      --m 10
-python pilot.py analyze    --target-gap 0.02
 ```
 
-Each step saves a checkpoint to `artifacts/` so it can be resumed/repeated without repeating expensive calls.
+**1. Generate candidates** (local)
+```bash
+python pilot.py generate --dataset humaneval --n 164 --k 3 --gen-temp 1.0
+```
 
-See `pilot.py` for details and `prompts.py` for judge prompts.
+**2. Ground truth via EvalPlus in Docker** (the local EvalPlus sandbox fails on macOS; Docker avoids it)
+```bash
+rm -f artifacts/samples_eval_results.json   # EvalPlus caches results - clear before re-evaluating
+docker run --rm --platform linux/amd64 -v "$(pwd)":/app \
+  ganler/evalplus:latest \
+  evalplus.evaluate --dataset humaneval --samples /app/artifacts/samples.jsonl
+python merge_results.py
+```
+
+**3. Judge** (local; the slow step - runs for several hours, cached and resumable)
+```bash
+python pilot.py judge --m 8
+```
+
+**4. Analyse** (the MDD result + plot)
+```bash
+python analyze_mdd.py
+```
+
+Each step checkpoints to `artifacts/`, so it can be stopped and resumed without repeating expensive calls.
+
+---
+
+## Limitations
+
+- Limited to short, self-contained functions (HumanEval+), not repository-scale tasks such as SWE-bench.
+- A single judge model; the *phenomenon* generalises, the exact numbers do not.
+- Ground truth comes from EvalPlus unit tests, not human judgement.
+- The i.i.d. assumption across judge runs is a simplification; aggregate uncertainty is estimated by bootstrap.
+
+---
+
+## References
+
+- Pasuksmit, J., Takerngsaksiri, W., Thongtanunam, P., Tantithamthavorn, C., et al. (2025). *Human-in-the-loop software development agents: challenges and future directions.* MSR (Industry Track).
+- Takerngsaksiri, W., Pasuksmit, J., Thongtanunam, P., Tantithamthavorn, C., et al. (2025). *Human-in-the-loop software development agents.* ICSE.
+- Liu, J., Xia, C. S., Wang, Y., & Zhang, L. (2023). *Is your code generated by ChatGPT really correct? Rigorous evaluation of LLMs for code generation* (EvalPlus). NeurIPS.
+- Tong, W., & Zhang, T. (2024). *CodeJudge: evaluating code generation with large language models.* EMNLP.
