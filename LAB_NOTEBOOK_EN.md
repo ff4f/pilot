@@ -22,7 +22,7 @@ Context: pilot for a Master by Research proposal on evaluating LLM coding agents
 
 ## Experiment 1 — Characterising judge noise & testing mitigations (baseline pilot)
 
-**Date**: [fill in]
+**Date**: June 29, 2026
 **Status**: Complete. **NULL** result for the main hypothesis (see interpretation).
 
 ### Aim
@@ -101,7 +101,7 @@ The pipeline is validated end to end (generate -> ground truth -> judge -> analy
 
 ## Experiment 2 — Minimum-Detectable-Difference redesign (Approach A)
 
-**Date**: [fill in]
+**Date**: June 30, 2026
 **Status**: Complete. Main hypothesis (H2) **supported**; H3 and H4 reported as negative/limited.
 
 ### Motivation

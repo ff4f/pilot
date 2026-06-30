@@ -33,7 +33,7 @@ This is actually an advantage: reproducible, self-contained, and directly answer
 
 | Component | Choice | Notes |
 |---|---|---|
-| Language | Python 3.10+ | |
+| Language | Python 3.9+ | |
 | Data + ground truth | **EvalPlus** (HumanEval+ / MBPP+) | `pip install evalplus`; strict unit tests included |
 | Test execution | EvalPlus (via Docker, safe) | automatic ground-truth pass/fail |
 | Solution generator | Any LLM (OpenAI-compatible) | generates correct & incorrect candidates |

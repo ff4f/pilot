@@ -15,13 +15,14 @@ env/
 .DS_Store
 Thumbs.db
 
-# Large data artifacts (keep plots, ignore heavy JSON/JSONL)
-artifacts/*.json
-artifacts/*.jsonl
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# Keep research artifacts (pool.json, eval results, plots) committed for reproducibility.
+# Ignore only transient/oversized files:
+artifacts/*.tmp
+artifacts/cache/
